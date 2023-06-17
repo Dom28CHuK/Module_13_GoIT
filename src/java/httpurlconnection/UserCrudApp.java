@@ -2,15 +2,15 @@ package httpurlconnection;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import models.CommentEntity;
 import models.UserEntity;
+import models.UserPostEntity;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -179,5 +179,87 @@ public class UserCrudApp {
         }
     }
 
+    public static void getCommentsForLastPostByUser(int userId) {
+        Optional<UserEntity> optionalUser = findUserById(userId);
+        if (optionalUser.isPresent()) {
+            UserEntity user = optionalUser.get();
+            String postUrl = BASE_URL + "/" + user.getId() + "/posts";
+            List<UserPostEntity> userPosts = getUserPosts(postUrl);
+            if (!userPosts.isEmpty()) {
+                UserPostEntity lastPost = userPosts.get(userPosts.size() - 1);
+                String commentsUrl = "https://jsonplaceholder.typicode.com/posts/" + lastPost.getId() + "/comments";
+                List<CommentEntity> comments = getComments(commentsUrl);
+                if (!comments.isEmpty()) {
+                    String fileName = "user-" + user.getId() + "-post-" + lastPost.getId() + "-comments.json";
+                    writeCommentsToFile(fileName, comments);
+                    System.out.println("Comments saved to file: " + fileName);
+                } else {
+                    System.out.println("No comments found for the last post of user with id: " + user.getId());
+                }
+            } else {
+                System.out.println("No posts found for user with id: " + user.getId());
+            }
+        } else {
+            System.out.println("User not found with id: " + userId);
+        }
+    }
+
+    private static List<UserPostEntity> getUserPosts(String postUrl) {
+        try {
+            URL url = new URL(postUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+
+            int responseCode = connection.getResponseCode();
+            if (HttpURLConnection.HTTP_OK == responseCode) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    String line;
+                    StringBuilder response = new StringBuilder();
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+                    Type userPostListType = new TypeToken<List<UserPostEntity>>() {}.getType();
+                    return gson.fromJson(response.toString(), userPostListType);
+                }
+            }
+            connection.disconnect();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return Collections.emptyList();
+    }
+
+    private static List<CommentEntity> getComments(String commentsUrl) {
+        try {
+            URL url = new URL(commentsUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    String line;
+                    StringBuilder response = new StringBuilder();
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+                    Type commentListType = new TypeToken<List<CommentEntity>>() {}.getType();
+                    return gson.fromJson(response.toString(), commentListType);
+                }
+            }
+            connection.disconnect();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return Collections.emptyList();
+    }
+
+    private static void writeCommentsToFile(String fileName, List<CommentEntity> comments) {
+        try (FileWriter fileWriter = new FileWriter(fileName)) {
+            gson.toJson(comments, fileWriter);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
 }
